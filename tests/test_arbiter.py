@@ -8,16 +8,24 @@ import logging
 import random
 
 class ArbiterScoreboard:
-    def __init__(self, dut):
+    def __init__(self, dut, log):
         self.dut = dut
+        self.log = log
         self.expected_grants = [queue.Queue() for _ in range(4)]
         self.log = logging.getLogger(__name__)
 
         for i in range(random.randint(6, 10)):
             self.expected_grants[random.randint(0, 3)].put(1)
 
+        for i in range(4):
+            self.log.info(f"Inserted {self.expected_grants[i].qsize()} in index: {i}")
+
         cocotb.start_soon(self.req_inserter(dut))
         cocotb.start_soon(self.grant_polling(dut))
+
+    
+    def is_complete(self):
+        return all(ee.empty() for ee in self.expected_grants)
         
     async def req_inserter(self, dut):
         while (True):
@@ -36,6 +44,7 @@ class ArbiterScoreboard:
 
             await RisingEdge(dut.clk)
 
+
     async def grant_polling(self, dut):
         while (True):
             value = self.dut.grant.value
@@ -51,22 +60,16 @@ class ArbiterScoreboard:
 async def arbiter_basic_test(dut):
     log = logger = logging.getLogger(__name__)
 
-    inserted = [queue.Queue() for _ in range(4)]
-
-    arbiter_scoreboard = ArbiterScoreboard(dut)
+    arbiter_scoreboard = ArbiterScoreboard(dut, log)
 
     # Start clock
     cocotb.start_soon(Clock(dut.clk, 20, units="ns").start())
-    dut.rst.value = 1;
-
     await RisingEdge(dut.clk)
-    await ClockCycles(dut.clk, 10)
-    dut.rst.value = 0;
-    await ClockCycles(dut.clk, 10)
 
-    dut.req.value = 0b1011
-    await ClockCycles(dut.clk, 20)
+    while(not arbiter_scoreboard.is_complete()):
+        await RisingEdge(dut.clk)
 
-    await RisingEdge(dut.clk)
+
+
 
 
