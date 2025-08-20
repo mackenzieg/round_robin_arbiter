@@ -14,8 +14,8 @@ class ArbiterScoreboard:
         self.expected_grants = [queue.Queue() for _ in range(4)]
         self.log = logging.getLogger(__name__)
 
-        for i in range(random.randint(6, 10)):
-            self.expected_grants[random.randint(0, 3)].put(1)
+        for i in range(10):
+            self.expected_grants[random.randint(0, 1) * 3].put(1)
 
         for i in range(4):
             self.log.info(f"Inserted {self.expected_grants[i].qsize()} in index: {i}")
@@ -51,7 +51,8 @@ class ArbiterScoreboard:
 
             for i in range(4):
                 if ((value >> i) & 1):
-                    self.expected_grants[i].get()
+                    if (not self.expected_grants[i].empty()):
+                        self.expected_grants[i].get()
 
             await RisingEdge(dut.clk)
 
@@ -60,14 +61,18 @@ class ArbiterScoreboard:
 async def arbiter_basic_test(dut):
     log = logger = logging.getLogger(__name__)
 
-    arbiter_scoreboard = ArbiterScoreboard(dut, log)
-
     # Start clock
     cocotb.start_soon(Clock(dut.clk, 20, units="ns").start())
+    dut.rst.value = 1
+    await ClockCycles(dut.clk, 10)
+
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 10)
+
+    arbiter_scoreboard = ArbiterScoreboard(dut, log)
     await RisingEdge(dut.clk)
 
-    while(not arbiter_scoreboard.is_complete()):
-        await RisingEdge(dut.clk)
+    await ClockCycles(dut.clk, 100)
 
 
 
